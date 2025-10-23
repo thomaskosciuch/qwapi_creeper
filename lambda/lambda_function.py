@@ -65,7 +65,7 @@ def handle_cloudwatch_alarm_event(event: Dict[str, Any], context: Any) -> Dict[s
             if health_status['unhealthy_count'] > 0:
                 message = create_unhealthy_message(health_status, alarm_name)
                 send_slack_message(message)
-                setup_retrigger(health_status)
+                setup_retrigger(health_status, context)
             else:
                 # False alarm - targets are actually healthy
                 send_slack_message(
@@ -105,7 +105,7 @@ def handle_alarm_event(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Send initial alert and set up retrigger
             message = create_unhealthy_message(health_status, alarm_name)
             send_slack_message(message)
-            setup_retrigger(health_status)
+            setup_retrigger(health_status, context)
         else:
             # False alarm - targets are actually healthy
             send_slack_message(
@@ -196,7 +196,7 @@ def create_unhealthy_message(health_status: Dict[str, Any], alarm_name: str) -> 
     Create message for when targets become unhealthy
     """
     
-    message = f"🚨 :qweeper: *Prod Ec2s Health Alert*\n\n"
+    message = f"🚨 :qweeper: *Prod Ec2s Health Alert* :qweeper: 🚨\n\n"
     message += f"**Health Status:** 📊\n"
     message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
     message += f"• Healthy: {health_status['healthy_count']} ✅\n"
@@ -216,7 +216,7 @@ def create_still_unhealthy_message(health_status: Dict[str, Any], original_times
     Create message for when targets are still unhealthy
     """
     
-    message = f"⚠️ :qweeper: *Prod Ec2s Still Unhealthy*\n\n"
+    message = f"⚠️ :qweeper: *Prod Ec2s Still Unhealthy*  :qweeper: ⚠️\n\n"
     message += f"**Current Health Status:** 📊\n"
     message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
     message += f"• Healthy: {health_status['healthy_count']} ✅\n"
@@ -236,7 +236,7 @@ def create_recovery_message(health_status: Dict[str, Any], original_timestamp: s
     Create message for when targets recover
     """
     
-    message = f"✅ :qweeper: *Prod Ec2s Recovered*\n\n"
+    message = f"✅ :qweeper: *Prod Ec2s Recovered*  :qweeper: ✅\n\n"
     message += f"**Current Health Status:** 📊\n"
     message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
     message += f"• Healthy: {health_status['healthy_count']} ✅\n"
@@ -250,7 +250,7 @@ def create_health_summary_message(health_status: Dict[str, Any]) -> str:
     Create general health summary message
     """
     
-    message = f"📊 :qweeper: *Prod Ec2s Health Summary*\n\n"
+    message = f"📊 :qweeper: *Prod Ec2s Health Summary* :qweeper: 📊\n\n"
     message += f"**Health Status:** 📈\n"
     message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
     message += f"• Healthy: {health_status['healthy_count']} ✅\n"
@@ -299,7 +299,7 @@ def send_slack_message(message: str, channel: str = None) -> bool:
         logger.error(f"Failed to send Slack message: {str(e)}")
         return False
 
-def setup_retrigger(health_status: Dict[str, Any], channel: str = None) -> None:
+def setup_retrigger(health_status: Dict[str, Any], context: Any, channel: str = None) -> None:
     """
     Set up EventBridge rule to retrigger this Lambda in 2 minutes
     """
