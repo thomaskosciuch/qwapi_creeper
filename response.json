@@ -1,0 +1,1 @@
+{"statusCode": 200, "body": "{\"message\": \"Health check completed\", \"health_status\": {\"total_targets\": 2, \"healthy_count\": 2, \"unhealthy_count\": 0, \"unhealthy_targets\": [], \"timestamp\": \"2025-10-23T19:21:23.219762+00:00\"}}"}
