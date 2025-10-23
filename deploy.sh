@@ -9,7 +9,10 @@ echo "🚀 Deploying QwapiQweeper..."
 # Load environment variables from .env file
 if [ -f .env ]; then
     echo "📄 Loading environment variables from .env file..."
-    export $(cat .env | grep -v '^#' | xargs)
+    set -a  # automatically export all variables
+    source .env
+    set +a  # stop automatically exporting
+    echo "✅ Environment variables loaded from .env file"
 else
     echo "⚠️  No .env file found. Using environment variables from shell."
 fi
@@ -32,6 +35,7 @@ fi
 echo "📋 Configuration:"
 echo "   Target Group ARN: arn:aws:elasticloadbalancing:ca-central-1:778983355679:targetgroup/osiris-prod-load-balancer/fb62f239363e4741"
 echo "   Slack Channel: $SLACK_CHANNEL"
+echo "   Slack Bot Token: ${SLACK_BOT_TOKEN:0:20}..." # Show first 20 chars for security
 echo "   Region: ca-central-1"
 
 # Install dependencies

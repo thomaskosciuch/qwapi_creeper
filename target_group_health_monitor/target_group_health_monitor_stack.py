@@ -11,6 +11,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 import os
+from datetime import datetime, timezone
 
 
 class QwapiQweeperStack(Stack):
@@ -44,7 +45,9 @@ class QwapiQweeperStack(Stack):
                             effect=iam.Effect.ALLOW,
                             actions=[
                                 "elasticloadbalancing:DescribeTargetHealth",
-                                "elasticloadbalancing:DescribeTargetGroups"
+                                "elasticloadbalancing:DescribeTargetGroups",
+                                "elasticloadbalancing:DescribeLoadBalancers",
+                                "elasticloadbalancing:DescribeTargetGroupAttributes"
                             ],
                             resources=["*"]
                         )
@@ -55,7 +58,7 @@ class QwapiQweeperStack(Stack):
 
         health_monitor_lambda = lambda_.Function(
             self, "QwapiQweeperLambda",
-            runtime=lambda_.Runtime.PYTHON_3_9,
+            runtime=lambda_.Runtime.PYTHON_3_11,
             handler="lambda_function.lambda_handler",
             code=lambda_.Code.from_asset("lambda"),
             role=lambda_role,
@@ -67,7 +70,8 @@ class QwapiQweeperStack(Stack):
                 "SLACK_WEBHOOK_URL": os.getenv("SLACK_WEBHOOK_URL", ""),
                 "SLACK_BOT_TOKEN": os.getenv("SLACK_BOT_TOKEN", ""),
                 "SLACK_CHANNEL": os.getenv("SLACK_CHANNEL", "C09DH2G0K0Q"),
-                "LOG_LEVEL": "INFO"
+                "LOG_LEVEL": "INFO",
+                "DEPLOYMENT_TIME": datetime.now(timezone.utc).isoformat()
             },
             log_retention=logs.RetentionDays.ONE_WEEK
         )

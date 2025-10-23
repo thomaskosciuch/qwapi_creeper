@@ -33,12 +33,52 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if event.get('Records') and event.get('Records')[0].get('Sns'):
             return handle_alarm_event(event, context)
         
+        # Handle CloudWatch alarm events (new format)
+        if event.get('source') == 'aws.cloudwatch' and event.get('alarmData'):
+            return handle_cloudwatch_alarm_event(event, context)
+        
         return handle_direct_check(event, context)
         
     except Exception as e:
         logger.error(f"Error in lambda_handler: {str(e)}")
         send_slack_message(
             f"🚨 *Error in Health Monitor Lambda*\n"
+            f"Error: {str(e)}\n"
+            f"Time: {datetime.now(timezone.utc).isoformat()}"
+        )
+        raise
+
+def handle_cloudwatch_alarm_event(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Handle CloudWatch alarm events (new format)
+    """
+    try:
+        alarm_data = event.get('alarmData', {})
+        alarm_name = alarm_data.get('alarmName', 'Unknown')
+        new_state = alarm_data.get('state', {}).get('value', 'UNKNOWN')
+        
+        logger.info(f"CloudWatch alarm event: {alarm_name} -> {new_state}")
+        
+        if new_state == 'ALARM':
+            health_status = check_target_group_health()
+            
+            if health_status['unhealthy_count'] > 0:
+                message = create_unhealthy_message(health_status, alarm_name)
+                send_slack_message(message)
+                setup_retrigger(health_status)
+            else:
+                # False alarm - targets are actually healthy
+                send_slack_message(
+                    f"✅ :qweeper: *Prod Ec2s False Alarm - Targets Healthy*\n"
+                    f"All targets in the group are healthy! 🎉"
+                )
+        
+        return {'statusCode': 200, 'body': 'CloudWatch alarm event processed'}
+        
+    except Exception as e:
+        logger.error(f"Error handling CloudWatch alarm event: {str(e)}")
+        send_slack_message(
+            f"🚨 *Error in CloudWatch Alarm Handler*\n"
             f"Error: {str(e)}\n"
             f"Time: {datetime.now(timezone.utc).isoformat()}"
         )
@@ -69,10 +109,8 @@ def handle_alarm_event(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         else:
             # False alarm - targets are actually healthy
             send_slack_message(
-                f"✅ *False Alarm - Targets Healthy*\n"
-                f"Alarm: {alarm_name}\n"
-                f"Time: {datetime.now(timezone.utc).isoformat()}\n"
-                f"All targets in the group are healthy."
+                f"✅ :qweeper: *Prod Ec2s False Alarm - Targets Healthy*\n"
+                f"All targets in the group are healthy! 🎉"
             )
     
     return {'statusCode': 200, 'body': 'Alarm event processed'}
@@ -157,23 +195,19 @@ def create_unhealthy_message(health_status: Dict[str, Any], alarm_name: str) -> 
     """
     Create message for when targets become unhealthy
     """
-    timestamp = datetime.now(timezone.utc).isoformat()
     
-    message = f"🚨 *Target Group Health Alert*\n"
-    message += f"Target Group: `{TARGET_GROUP_NAME}`\n"
-    message += f"Alarm: `{alarm_name}`\n"
-    message += f"Time: `{timestamp}`\n\n"
-    message += f"**Health Status:**\n"
-    message += f"• Total Targets: {health_status['total_targets']}\n"
-    message += f"• Healthy: {health_status['healthy_count']}\n"
-    message += f"• Unhealthy: {health_status['unhealthy_count']}\n\n"
+    message = f"🚨 :qweeper: *Prod Ec2s Health Alert*\n\n"
+    message += f"**Health Status:** 📊\n"
+    message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
+    message += f"• Healthy: {health_status['healthy_count']} ✅\n"
+    message += f"• Unhealthy: {health_status['unhealthy_count']} ❌\n\n"
     
     if health_status['unhealthy_targets']:
-        message += "**Unhealthy Targets:**\n"
+        message += "**Unhealthy Targets:** ⚠️\n"
         for target in health_status['unhealthy_targets']:
-            message += f"• `{target['target_id']}` - {target['state']} ({target['reason']})\n"
+            message += f"• `{target['target_id']}` - {target['state']} ({target['reason']}) 🔴\n"
     
-    message += f"\nI'll check again in 2 minutes and update this message."
+    message += f"\nI'll check again in 2 minutes and update this message. 🔄"
     
     return message
 
@@ -181,23 +215,19 @@ def create_still_unhealthy_message(health_status: Dict[str, Any], original_times
     """
     Create message for when targets are still unhealthy
     """
-    current_time = datetime.now(timezone.utc).isoformat()
     
-    message = f"⚠️ *Target Group Still Unhealthy*\n"
-    message += f"Target Group: `{TARGET_GROUP_NAME}`\n"
-    message += f"Original Alert: `{original_timestamp}`\n"
-    message += f"Current Time: `{current_time}`\n\n"
-    message += f"**Current Health Status:**\n"
-    message += f"• Total Targets: {health_status['total_targets']}\n"
-    message += f"• Healthy: {health_status['healthy_count']}\n"
-    message += f"• Unhealthy: {health_status['unhealthy_count']}\n\n"
+    message = f"⚠️ :qweeper: *Prod Ec2s Still Unhealthy*\n\n"
+    message += f"**Current Health Status:** 📊\n"
+    message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
+    message += f"• Healthy: {health_status['healthy_count']} ✅\n"
+    message += f"• Unhealthy: {health_status['unhealthy_count']} ❌\n\n"
     
     if health_status['unhealthy_targets']:
-        message += "**Still Unhealthy Targets:**\n"
+        message += "**Still Unhealthy Targets:** 🔴\n"
         for target in health_status['unhealthy_targets']:
-            message += f"• `{target['target_id']}` - {target['state']} ({target['reason']})\n"
+            message += f"• `{target['target_id']}` - {target['state']} ({target['reason']}) ⚠️\n"
     
-    message += f"\nI'll check again in 2 minutes."
+    message += f"\nI'll check again in 2 minutes. 🔄"
     
     return message
 
@@ -205,17 +235,13 @@ def create_recovery_message(health_status: Dict[str, Any], original_timestamp: s
     """
     Create message for when targets recover
     """
-    current_time = datetime.now(timezone.utc).isoformat()
     
-    message = f"✅ *Target Group Recovered*\n"
-    message += f"Target Group: `{TARGET_GROUP_NAME}`\n"
-    message += f"Original Alert: `{original_timestamp}`\n"
-    message += f"Recovery Time: `{current_time}`\n\n"
-    message += f"**Current Health Status:**\n"
-    message += f"• Total Targets: {health_status['total_targets']}\n"
-    message += f"• Healthy: {health_status['healthy_count']}\n"
-    message += f"• Unhealthy: {health_status['unhealthy_count']}\n\n"
-    message += f"All targets are now healthy! 🎉"
+    message = f"✅ :qweeper: *Prod Ec2s Recovered*\n\n"
+    message += f"**Current Health Status:** 📊\n"
+    message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
+    message += f"• Healthy: {health_status['healthy_count']} ✅\n"
+    message += f"• Unhealthy: {health_status['unhealthy_count']} ❌\n\n"
+    message += f"All targets are now healthy! 🎉✨"
     
     return message
 
@@ -223,15 +249,12 @@ def create_health_summary_message(health_status: Dict[str, Any]) -> str:
     """
     Create general health summary message
     """
-    timestamp = datetime.now(timezone.utc).isoformat()
     
-    message = f"📊 *Target Group Health Summary*\n"
-    message += f"Target Group: `{TARGET_GROUP_NAME}`\n"
-    message += f"Time: `{timestamp}`\n\n"
-    message += f"**Health Status:**\n"
-    message += f"• Total Targets: {health_status['total_targets']}\n"
-    message += f"• Healthy: {health_status['healthy_count']}\n"
-    message += f"• Unhealthy: {health_status['unhealthy_count']}\n"
+    message = f"📊 :qweeper: *Prod Ec2s Health Summary*\n\n"
+    message += f"**Health Status:** 📈\n"
+    message += f"• Total Targets: {health_status['total_targets']} 🎯\n"
+    message += f"• Healthy: {health_status['healthy_count']} ✅\n"
+    message += f"• Unhealthy: {health_status['unhealthy_count']} ❌"
     
     return message
 
